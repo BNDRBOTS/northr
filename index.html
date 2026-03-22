@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>NØRTHR™ | Earn the Line</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400&family=Space+Grotesk:wght@300;500;700&family=Space+Mono:ital@0;1&display=swap" rel="stylesheet">
+
+    <style>
+        /* ==========================================================================
+           1. DESIGN TOKENS & CORE
+           ========================================================================== */
+        :root {
+            --void: #030304;
+            --steel: #111113;
+            --iron: #222225;
+            --ice: #00e5ff;
+            --snow: #f0f0f2;
+            --glass-base: rgba(17, 17, 19, 0.4);
+            --glass-sheen: inset 0 1px 1px rgba(255, 255, 255, 0.1), inset 0 -1px 1px rgba(0, 0, 0, 0.5);
+            --glass-border: rgba(240, 240, 242, 0.08);
+            --ease-lux: cubic-bezier(0.19, 1, 0.22, 1);
+            --ease-snap: cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        * {
+            margin: 0; padding: 0; box-sizing: border-box;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        body {
+            background-color: var(--void); color: var(--snow);
+            font-family: 'Inter', sans-serif;
+            overflow-x: hidden; overscroll-behavior: none;
+            cursor: none;
+        }
+
+        h1, h2, h3, .brand { font-family: 'Space Grotesk', sans-serif; }
+        .tech-spec { font-family: 'Space Mono', monospace; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.1em; }
+
+        /* ==========================================================================
+           2. CURSOR INTELLIGENCE
+           ========================================================================== */
+        #cursor, #cursor-follower {
+            position: fixed; top: 0; left: 0; pointer-events: none;
+            border-radius: 50%; z-index: 9999;
+            transform: translate(-50%, -50%);
+            will-change: transform, width, height;
+        }
+        #cursor { 
+            width: 6px; height: 6px; background: var(--ice); 
+            transition: width 0.3s var(--ease-lux), height 0.3s var(--ease-lux); 
+        }
+        #cursor-follower { 
+            width: 40px; height: 40px; border: 1px solid rgba(0, 229, 255, 0.3); 
+            transition: width 0.4s var(--ease-lux), height 0.4s var(--ease-lux), background 0.4s, border-color 0.4s; 
+            display: flex; align-items: center; justify-content: center; 
+        }
+        body:active #cursor { width: 2px; height: 2px; }
+        body:active #cursor-follower:not(.drag-mode) { width: 20px; height: 20px; }
+
+        .cursor-text { 
+            font-family: 'Space Mono'; font-size: 0.65rem; color: var(--ice); 
+            opacity: 0; transition: opacity 0.3s; letter-spacing: 0.15em; font-weight: bold; 
+        }
+        #cursor-follower.drag-mode { 
+            width: 80px; height: 80px; background: rgba(0, 229, 255, 0.05); 
+            backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+            border-color: rgba(0, 229, 255, 0.5);
+        }
+        #cursor-follower.drag-mode .cursor-text { opacity: 1; }
+
+        /* ==========================================================================
+           3. UI OVERLAYS & NAVIGATION
+           ========================================================================== */
+        .fixed-ui {
+            position: fixed; z-index: 100; display: flex; justify-content: space-between;
+            width: 100%; padding: 2rem 3vw; pointer-events: none; mix-blend-mode: difference;
+        }
+        .ui-element { pointer-events: auto; cursor: none; }
+        .nav-brand { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.05em; }
+        .nav-loadout { 
+            font-family: 'Space Mono'; font-size: 0.85rem; border: 1px solid var(--glass-border); 
+            padding: 0.6rem 1.2rem; border-radius: 30px; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            transition: all 0.4s var(--ease-lux); background: rgba(255,255,255,0.02);
+        }
+        .nav-loadout:hover { background: var(--snow); color: var(--void); border-color: var(--snow); }
+
+        .route-indicator {
+            position: fixed; bottom: 2rem; left: 3vw; z-index: 100;
+            display: flex; flex-direction: column; gap: 0.75rem;
+            pointer-events: none; mix-blend-mode: difference;
+        }
+        .route-node { display: flex; align-items: center; gap: 1rem; opacity: 0.25; transition: opacity 0.5s var(--ease-lux); }
+        .route-node.active { opacity: 1; }
+        .route-dot { width: 4px; height: 4px; background: var(--snow); border-radius: 50%; box-shadow: 0 0 8px rgba(255,255,255,0.5); }
+        .route-label { font-family: 'Space Mono'; font-size: 0.65rem; letter-spacing: 0.1em; }
+
+        /* SVG Drippy Filter */
+        .svg-filters { position: absolute; width: 0; height: 0; pointer-events: none; }
+        .drippy { filter: url('#drip-filter'); transition: filter 1s var(--ease-lux); }
+        .drippy:hover { filter: url('#drip-filter-intense'); }
+
+        #weather-engine { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; pointer-events: none; opacity: 0.85; }
+
+        /* ==========================================================================
+           4. SCROLL ARCHITECTURE & HERO
+           ========================================================================== */
+        #smooth-wrapper { position: fixed; top: 0; left: 0; width: 100%; height: 100vh; overflow: hidden; z-index: 10; }
+        #scroll-content { will-change: transform; }
+
+        .zone-summit { height: 100vh; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; }
+        
+        /* HD Mountain Renders */
+        .mountain-layer {
+            position: absolute; bottom: 0; width: 110vw; left: -5vw;
+            background-size: cover; background-position: center 20%; background-repeat: no-repeat;
+            will-change: transform;
+            -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+            mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+        }
+        /* Verified 4K Unsplash Atmosphere */
+        .m-back { height: 85vh; background-image: url('https://images.unsplash.com/photo-1478265409131-1f65c88f965c?q=80&w=2500&auto=format&fit=crop'); opacity: 0.6; z-index: 2; filter: contrast(1.2) brightness(0.6); }
+        .m-mid { height: 65vh; background-image: url('https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?q=80&w=2500&auto=format&fit=crop'); opacity: 0.8; z-index: 3; filter: contrast(1.1) brightness(0.8) sepia(0.2) hue-rotate(180deg); }
+        .m-front { height: 45vh; background-image: url('https://images.unsplash.com/photo-1516430332840-75416551b8a5?q=80&w=2500&auto=format&fit=crop'); z-index: 4; box-shadow: 0 -20px 100px rgba(0, 229, 255, 0.05); border-top: 1px solid rgba(255,255,255,0.03); filter: contrast(1.3) brightness(0.7); }
+
+        .hero-title-lockup { position: relative; z-index: 10; display: flex; flex-direction: column; align-items: flex-end; transform: translateX(-10vw) translateY(-5vh); }
+        .logo-main { font-size: clamp(4rem, 12vw, 12rem); font-weight: 700; line-height: 0.8; letter-spacing: -0.06em; color: var(--snow); position: relative; }
+        .logo-tm { font-size: clamp(1rem, 2vw, 2rem); position: absolute; top: 0; right: -1.5em; color: var(--ice); }
+        .tagline { font-family: 'Space Mono'; font-size: 0.9rem; color: rgba(240, 240, 242, 0.6); margin-top: 1.5rem; letter-spacing: 0.25em; text-transform: uppercase; }
+
+        .cta-drop {
+            margin-top: 4rem; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.2); color: var(--snow);
+            padding: 1.2rem 3.5rem; border-radius: 40px; font-family: 'Space Grotesk'; font-size: 1rem; text-transform: uppercase; letter-spacing: 0.1em;
+            cursor: none; overflow: hidden; position: relative; transition: color 0.4s, border-color 0.4s; pointer-events: auto;
+            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); box-shadow: var(--glass-sheen);
+        }
+        .cta-drop::before {
+            content: ''; position: absolute; top: 100%; left: 0; width: 100%; height: 100%;
+            background: var(--snow); transition: top 0.4s var(--ease-lux); z-index: -1;
+        }
+        .cta-drop:hover { color: var(--void); border-color: var(--snow); }
+        .cta-drop:hover::before { top: 0; }
+
+        .floodlight { position: absolute; top: -20vh; right: -10vw; width: 80vw; height: 80vw; background: radial-gradient(circle, rgba(0, 229, 255, 0.06) 0%, transparent 60%); z-index: 1; pointer-events: none; mix-blend-mode: screen; }
+
+        /* ==========================================================================
+           5. TERRAIN ZONES & HD COMMERCE TILES
+           ========================================================================== */
+        .terrain-zone { min-height: 100vh; padding: 15vh 10vw; position: relative; z-index: 10; border-top: 1px solid rgba(255,255,255,0.02); }
+        .zone-header { display: flex; align-items: flex-end; gap: 2rem; margin-bottom: 8vh; }
+        .zone-num { font-family: 'Space Mono'; font-size: 3rem; color: var(--ice); opacity: 0.4; }
+        .zone-title { font-size: 4rem; font-weight: 300; letter-spacing: -0.02em; }
+
+        .slider-viewport { width: 100vw; margin-left: -10vw; padding: 0 10vw; overflow: visible; cursor: none; position: relative; }
+        .slider-track { display: flex; gap: 2.5vw; width: max-content; will-change: transform; padding-right: 20vw; }
+
+        .gear-item {
+            position: relative; width: 34vw; min-width: 400px; height: 65vh;
+            background: var(--glass-base); border-radius: 24px; overflow: hidden;
+            pointer-events: auto; cursor: none; border: 1px solid var(--glass-border);
+            transition: border-color 0.5s var(--ease-lux), transform 0.5s var(--ease-lux);
+            transform-style: preserve-3d; box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+        }
+        
+        .gear-item::before {
+            content: ''; position: absolute; inset: 0;
+            background: radial-gradient(800px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(0, 229, 255, 0.15), transparent 40%);
+            z-index: 1; pointer-events: none; opacity: 0; transition: opacity 0.6s; mix-blend-mode: screen;
+        }
+        .gear-item:hover::before { opacity: 1; }
+        .gear-item:hover { border-color: rgba(0, 229, 255, 0.4); transform: translateY(-10px); }
+        
+        .gear-overlay {
+            position: absolute; inset: 0; z-index: 2;
+            background: linear-gradient(to top, rgba(3,3,4,0.95) 0%, rgba(3,3,4,0.4) 40%, transparent 100%);
+            display: flex; flex-direction: column; justify-content: flex-end; padding: 3rem;
+            opacity: 0.8; transform: translateY(15px); transition: all 0.6s var(--ease-lux);
+        }
+        .gear-item:hover .gear-overlay { opacity: 1; transform: translateY(0); }
+
+        .gear-name { font-size: 2.4rem; font-weight: 500; margin-bottom: 0.5rem; transform: translateZ(30px); transition: transform 0.5s var(--ease-lux); }
+        .gear-item:hover .gear-name { transform: translateZ(60px); }
+
+        .gear-specs { display: flex; gap: 0.8rem; margin-bottom: 2.5rem; flex-wrap: wrap; }
+        .spec-pill {
+            background: rgba(255,255,255,0.03); padding: 0.5rem 1.2rem; border-radius: 20px;
+            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); color: var(--ice);
+            border: 1px solid rgba(0, 229, 255, 0.15); box-shadow: var(--glass-sheen);
+        }
+
+        .btn-acquire {
+            align-self: flex-start; background: var(--snow); color: var(--void); border: none;
+            padding: 1.2rem 3rem; border-radius: 40px; font-family: 'Space Grotesk'; font-weight: 700;
+            text-transform: uppercase; cursor: none; transition: background 0.3s, box-shadow 0.3s, transform 0.2s linear;
+            will-change: transform; letter-spacing: 0.05em; font-size: 0.9rem;
+        }
+        .btn-acquire:hover { background: var(--ice); box-shadow: 0 0 25px rgba(0, 229, 255, 0.4); }
+
+        /* HD Render Injection */
+        .gear-image {
+            width: 100%; height: 100%; background-color: var(--iron);
+            background-size: cover; background-position: center;
+            opacity: 0.7; mix-blend-mode: luminosity;
+            transition: transform 0.8s var(--ease-lux), opacity 0.8s var(--ease-lux), mix-blend-mode 0.8s;
+        }
+        .gear-item:hover .gear-image { transform: scale(1.08); opacity: 1; mix-blend-mode: normal; }
+
+        /* ==========================================================================
+           6. ZONE 04: WHITEOUT (HD BLINDING SNOWSCAPE)
+           ========================================================================== */
+        .zone-whiteout {
+            background-image: url('https://images.unsplash.com/photo-1483664852095-d6cc6870702d?q=80&w=2500&auto=format&fit=crop');
+            background-size: cover; background-position: center; background-attachment: fixed;
+            color: var(--void); position: relative;
+        }
+        .zone-whiteout::before {
+            content: ''; position: absolute; inset: 0; background: rgba(240, 240, 242, 0.85); /* Blinding overlay */
+            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); z-index: 0;
+        }
+        .zone-whiteout > * { position: relative; z-index: 1; }
+        
+        .zone-whiteout .gear-item { background: rgba(255,255,255,0.6); border-color: rgba(0,0,0,0.1); box-shadow: 0 20px 40px rgba(0,0,0,0.1); }
+        .zone-whiteout .gear-overlay { background: linear-gradient(to top, rgba(240,240,242,0.98) 0%, rgba(240,240,242,0.6) 50%, transparent 100%); }
+        .zone-whiteout .zone-num { color: var(--void); opacity: 0.3; }
+        .zone-whiteout .spec-pill { background: rgba(0,0,0,0.03); color: var(--void); border-color: rgba(0,0,0,0.1); box-shadow: none; }
+        .zone-whiteout .btn-acquire { background: var(--void); color: var(--snow); }
+        .zone-whiteout .btn-acquire:hover { background: var(--ice); color: var(--void); box-shadow: 0 0 20px rgba(0, 0, 0, 0.1); }
+
+        /* Responsive */
+        @media (max-width: 900px) {
+            .slider-viewport { padding: 0 5vw; margin-left: -5vw; }
+            .gear-item { width: 85vw; min-width: 300px; height: 55vh; }
+            .logo-main { transform: translateX(0); }
+            .hero-title-lockup { align-items: center; text-align: center; transform: none; }
+            .fixed-ui { padding: 1.5rem 5vw; }
+            .route-indicator { display: none; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- SVG Filters for Drippy Corruption -->
+    <svg class="svg-filters">
+        <defs>
+            <filter id="drip-filter">
+                <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="blur" />
+                <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -7" result="goo" />
+                <feBlend in="SourceGraphic" in2="goo" />
+            </filter>
+            <filter id="drip-filter-intense">
+                <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur" />
+                <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 22 -9" result="goo" />
+                <feBlend in="SourceGraphic" in2="goo" />
+            </filter>
+        </defs>
+    </svg>
+
+    <div id="cursor"></div>
+    <div id="cursor-follower"><span class="cursor-text">DRAG</span></div>
+    <canvas id="weather-engine"></canvas>
+
+    <header class="fixed-ui">
+        <div class="nav-brand ui-element drippy">NØRTHR</div>
+        <div class="nav-loadout ui-element" id="loadout-trigger">[ LOADOUT: 0 ]</div>
+    </header>
+
+    <div class="route-indicator">
+        <div class="route-node active" data-target="summit"><div class="route-dot"></div><div class="route-label">00 SUMMIT</div></div>
+        <div class="route-node" data-target="park"><div class="route-dot"></div><div class="route-label">01 PARK</div></div>
+        <div class="route-node" data-target="night-run"><div class="route-dot"></div><div class="route-label">02 NIGHT_RUN</div></div>
+        <div class="route-node" data-target="backcountry"><div class="route-dot"></div><div class="route-label">03 B/C</div></div>
+        <div class="route-node" data-target="whiteout"><div class="route-dot"></div><div class="route-label">04 WHITEOUT</div></div>
+    </div>
+
+    <div id="smooth-wrapper">
+        <div id="scroll-content">
+            
+            <section class="zone-summit route-section" id="summit">
+                <div class="floodlight"></div>
+                <div class="mountain-layer m-back" data-speed="0.1"></div>
+                <div class="mountain-layer m-mid" data-speed="0.25"></div>
+                <div class="mountain-layer m-front" data-speed="0.4"></div>
+
+                <div class="hero-title-lockup" data-speed="0.65">
+                    <h1 class="logo-main drippy">NØRTHR<span class="logo-tm">™</span></h1>
+                    <p class="tagline">Earn the Line.</p>
+                    <button class="cta-drop ui-element" onclick="window.app.scrollTo('park')">Drop In</button>
+                </div>
+            </section>
+
+            <section class="terrain-zone route-section" id="park">
+                <div class="zone-header">
+                    <span class="zone-num">01</span>
+                    <h2 class="zone-title">PARK / URBAN</h2>
+                </div>
+                <div class="slider-viewport interactive-drag">
+                    <div class="slider-track">
+                        <div class="gear-item">
+                            <div class="gear-image" style="background-image: url('https://images.unsplash.com/photo-1551024709-8f23befc6f87?q=80&w=1000&auto=format&fit=crop');"></div>
+                            <div class="gear-overlay">
+                                <h3 class="gear-name">Static Jib Jacket</h3>
+                                <div class="gear-specs"><span class="spec-pill tech-spec">15K Water</span><span class="spec-pill tech-spec">Flex: High</span></div>
+                                <button class="btn-acquire ui-element" onclick="window.app.acquireGear()">Acquire</button>
+                            </div>
+                        </div>
+                        <div class="gear-item">
+                            <div class="gear-image" style="background-image: url('https://images.unsplash.com/photo-1546111380-cfca9a43fd85?q=80&w=1000&auto=format&fit=crop');"></div>
+                            <div class="gear-overlay">
+                                <h3 class="gear-name">Rail Pant</h3>
+                                <div class="gear-specs"><span class="spec-pill tech-spec">Kevlar Knees</span></div>
+                                <button class="btn-acquire ui-element" onclick="window.app.acquireGear()">Acquire</button>
+                            </div>
+                        </div>
+                        <div class="gear-item">
+                            <div class="gear-image" style="background-image: url('https://images.unsplash.com/photo-1582266255765-fa5cf1a1d501?q=80&w=1000&auto=format&fit=crop');"></div>
+                            <div class="gear-overlay">
+                                <h3 class="gear-name">Ghost Balaclava</h3>
+                                <div class="gear-specs"><span class="spec-pill tech-spec">Merino Wool</span></div>
+                                <button class="btn-acquire ui-element" onclick="window.app.acquireGear()">Acquire</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="terrain-zone route-section" id="night-run">
+                <div class="zone-header">
+                    <span class="zone-num">02</span>
+                    <h2 class="zone-title">NIGHT RUN</h2>
+                </div>
+                <div class="slider-viewport interactive-drag">
+                    <div class="slider-track">
+                        <div class="gear-item">
+                            <div class="gear-image" style="background-image: url('https://images.unsplash.com/photo-1582266255765-fa5cf1a1d501?q=80&w=1000&auto=format&fit=crop'); filter: hue-rotate(180deg);"></div>
+                            <div class="gear-overlay">
+                                <h3 class="gear-name">Apex Goggle</h3>
+                                <div class="gear-specs"><span class="spec-pill tech-spec">Low-Light Lens</span></div>
+                                <button class="btn-acquire ui-element" onclick="window.app.acquireGear()">Acquire</button>
+                            </div>
+                        </div>
+                        <div class="gear-item">
+                            <div class="gear-image" style="background-image: url('https://images.unsplash.com/photo-1551024709-8f23befc6f87?q=80&w=1000&auto=format&fit=crop'); filter: grayscale(1) contrast(1.5);"></div>
+                            <div class="gear-overlay">
+                                <h3 class="gear-name">Lumen Shell v2</h3>
+                                <div class="gear-specs"><span class="spec-pill tech-spec">3M Reflective</span><span class="spec-pill tech-spec">20K Breathable</span></div>
+                                <button class="btn-acquire ui-element" onclick="window.app.acquireGear()">Acquire</button>
+                            </div>
+                        </div>
+                        <div class="gear-item">
+                            <div class="gear-image" style="background-image: url('https://images.unsplash.com/photo-1546111380-cfca9a43fd85?q=80&w=1000&auto=format&fit=crop'); filter: brightness(0.5);"></div>
+                            <div class="gear-overlay">
+                                <h3 class="gear-name">Carbon Edge Glove</h3>
+                                <div class="gear-specs"><span class="spec-pill tech-spec">Heated Core</span></div>
+                                <button class="btn-acquire ui-element" onclick="window.app.acquireGear()">Acquire</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="terrain-zone route-section" id="backcountry">
+                <div class="zone-header">
+                    <span class="zone-num">03</span>
+                    <h2 class="zone-title">BACKCOUNTRY</h2>
+                </div>
+                <div class="slider-viewport interactive-drag">
+                    <div class="slider-track">
+                        <div class="gear-item">
+                            <div class="gear-image" style="background-image: url('https://images.unsplash.com/photo-1551024709-8f23befc6f87?q=80&w=1000&auto=format&fit=crop'); filter: sepia(0.3);"></div>
+                            <div class="gear-overlay">
+                                <h3 class="gear-name">Gore-Core Anorak</h3>
+                                <div class="gear-specs"><span class="spec-pill tech-spec">Expedition Grade</span><span class="spec-pill tech-spec">Beacon Pocket</span></div>
+                                <button class="btn-acquire ui-element" onclick="window.app.acquireGear()">Acquire</button>
+                            </div>
+                        </div>
+                        <div class="gear-item">
+                            <div class="gear-image" style="background-image: url('https://images.unsplash.com/photo-1546111380-cfca9a43fd85?q=80&w=1000&auto=format&fit=crop'); filter: hue-rotate(-20deg);"></div>
+                            <div class="gear-overlay">
+                                <h3 class="gear-name">Summit Bib</h3>
+                                <div class="gear-specs"><span class="spec-pill tech-spec">3-Layer Shell</span></div>
+                                <button class="btn-acquire ui-element" onclick="window.app.acquireGear()">Acquire</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="terrain-zone zone-whiteout route-section" id="whiteout">
+                <div class="zone-header">
+                    <span class="zone-num">04</span>
+                    <h2 class="zone-title drippy">WHITEOUT</h2>
+                </div>
+                <div style="max-width: 600px; margin-top: 10vh;">
+                    <p class="tech-spec" style="color: var(--void); margin-bottom: 2rem;">Brand Manifesto</p>
+                    <p style="font-size: 1.5rem; line-height: 1.6; font-weight: 400; letter-spacing: -0.01em;">We don't buy the line. We hike it. We bleed for it. First chair is a suggestion; the headlamp run at 3AM is the truth. Built for the frozen, the hungry, and the undeniably real.</p>
+                </div>
+                <div style="margin-top: 25vh; border-top: 1px solid rgba(0,0,0,0.1); padding-top: 2rem; display: flex; justify-content: space-between; font-family: 'Space Mono'; font-size: 0.8rem; font-weight: bold;">
+                    <span>©2026 NØRTHR™</span>
+                    <span>POD_SYS_READY // V_2026.1</span>
+                </div>
+            </section>
+
+        </div>
+    </div>
+
+    <script>
+        /**
+         * 2026 TOP-TIER ARCHITECTURE
+         * Modular, class-based vanilla execution. Memory safe, GC friendly, ProMotion 120Hz aligned.
+         */
+
+        class CursorIntelligence {
+            constructor() {
+                this.dom = {
+                    cursor: document.getElementById('cursor'),
+                    follower: document.getElementById('cursor-follower')
+                };
+                this.mouse = { x: 0, y: 0 };
+                this.render = { x: 0, y: 0 };
+                this.scale = 1;
+                this.isDragging = false;
+                
+                this.bindEvents();
+            }
+
+            bindEvents() {
+                window.addEventListener('mousemove', (e) => {
+                    this.mouse.x = e.clientX;
+                    this.mouse.y = e.clientY;
+                    this.dom.cursor.style.transform = `translate(${this.mouse.x}px, ${this.mouse.y}px) translate(-50%, -50%)`;
+                }, { passive: true });
+
+                document.querySelectorAll('.ui-element').forEach(el => {
+                    el.addEventListener('mouseenter', () => {
+                        this.scale = 1.5;
+                        this.dom.follower.style.borderColor = 'var(--ice)';
+                        this.dom.follower.style.background = 'rgba(0, 229, 255, 0.1)';
+                    });
+                    el.addEventListener('mouseleave', () => {
+                        this.scale = 1;
+                        this.dom.follower.style.borderColor = 'rgba(0, 229, 255, 0.3)';
+                        this.dom.follower.style.background = 'transparent';
+                    });
+                });
+            }
+
+            update() {
+                // Smooth Lerp
+                this.render.x += (this.mouse.x - this.render.x) * 0.2;
+                this.render.y += (this.mouse.y - this.render.y) * 0.2;
+                
+                const finalScale = this.isDragging ? 0.8 : this.scale;
+                this.dom.follower.style.transform = `translate(${this.render.x}px, ${this.render.y}px) translate(-50%, -50%) scale(${finalScale})`;
+            }
+        }
+
+        class SliderPhysics {
+            constructor(viewport) {
+                this.viewport = viewport;
+                this.track = viewport.querySelector('.slider-track');
+                this.x = { target: 0, current: 0, start: 0 };
+                this.isDown = false;
+                this.maxScroll = 0;
+
+                this.calculateBounds();
+                this.bindEvents();
+            }
+
+            calculateBounds() {
+                this.maxScroll = Math.max(0, this.track.scrollWidth - window.innerWidth + (window.innerWidth * 0.15));
+            }
+
+            bindEvents() {
+                window.addEventListener('resize', () => this.calculateBounds());
+
+                this.viewport.addEventListener('pointerdown', (e) => {
+                    this.isDown = true;
+                    this.x.start = e.clientX + this.x.target;
+                    window.app.cursor.isDragging = true;
+                });
+                window.addEventListener('pointerup', () => this.release());
+                window.addEventListener('pointercancel', () => this.release());
+                
+                window.addEventListener('pointermove', (e) => {
+                    if(!this.isDown) return;
+                    this.x.target = this.x.start - e.clientX;
+                    this.x.target = Math.max(0, Math.min(this.x.target, this.maxScroll)); // Hard Clamp
+                }, { passive: true });
+
+                this.viewport.addEventListener('mouseenter', () => window.app.cursor.dom.follower.classList.add('drag-mode'));
+                this.viewport.addEventListener('mouseleave', () => window.app.cursor.dom.follower.classList.remove('drag-mode'));
+            }
+
+            release() {
+                this.isDown = false;
+                if(window.app && window.app.cursor) window.app.cursor.isDragging = false;
+            }
+
+            update() {
+                this.x.current += (this.x.target - this.x.current) * 0.1;
+                const velocity = this.x.target - this.x.current;
+                
+                // Hardware accelerated transform with velocity skew
+                this.track.style.transform = `translate3d(${-this.x.current}px, 0, 0) skewX(${-velocity * 0.04}deg)`;
+            }
+        }
+
+        class KineticScroll {
+            constructor() {
+                this.wrapper = document.getElementById('smooth-wrapper');
+                this.content = document.getElementById('scroll-content');
+                this.parallaxElements = document.querySelectorAll('[data-speed]');
+                
+                this.scroll = { target: 0, current: 0, ease: 0.08 };
+                
+                this.initBodyHeight();
+                window.addEventListener('resize', () => this.initBodyHeight());
+                window.addEventListener('scroll', () => { this.scroll.target = window.scrollY; }, { passive: true });
+            }
+
+            initBodyHeight() {
+                document.body.style.height = `${this.content.getBoundingClientRect().height}px`;
+            }
+
+            update() {
+                this.scroll.current += (this.scroll.target - this.scroll.current) * this.scroll.ease;
+                
+                // Floor the value if it's very close to prevent sub-pixel jitter
+                if(Math.abs(this.scroll.target - this.scroll.current) < 0.01) {
+                    this.scroll.current = this.scroll.target;
+                }
+
+                this.content.style.transform = `translate3d(0, ${-this.scroll.current}px, 0)`;
+
+                this.parallaxElements.forEach(el => {
+                    const speed = parseFloat(el.getAttribute('data-speed'));
+                    const yPos = this.scroll.current * speed;
+                    el.style.transform = `translate3d(0, ${yPos}px, 0)`;
+                });
+            }
+        }
+
+        class WeatherEngine {
+            constructor() {
+                this.canvas = document.getElementById('weather-engine');
+                this.ctx = this.canvas.getContext('2d', { alpha: true });
+                this.particles = [];
+                this.width = 0;
+                this.height = 0;
+                
+                this.resize();
+                window.addEventListener('resize', () => this.resize());
+                
+                for (let i = 0; i < 120; i++) this.particles.push(this.createParticle(true));
+            }
+
+            resize() {
+                this.width = window.innerWidth;
+                this.height = window.innerHeight;
+                this.canvas.width = this.width;
+                this.canvas.height = this.height;
+            }
+
+            createParticle(randomY = false) {
+                return {
+                    x: Math.random() * this.width,
+                    y: randomY ? Math.random() * this.height : -10,
+                    size: Math.random() * 2 + 0.5,
+                    speedY: Math.random() * 2 + 1,
+                    speedX: (Math.random() - 0.5) * 4 - 2, // Aggressive crosswind
+                    opacity: Math.random() * 0.5 + 0.1
+                };
+            }
+
+            update(scrollVelocity) {
+                this.ctx.clearRect(0, 0, this.width, this.height);
+                this.ctx.fillStyle = `rgba(240, 240, 242, 1)`;
+
+                for (let i = 0; i < this.particles.length; i++) {
+                    let p = this.particles[i];
+                    
+                    p.y += p.speedY + (scrollVelocity * 0.08); // React to scroll
+                    p.x += p.speedX;
+
+                    if (p.y > this.height) Object.assign(p, this.createParticle());
+                    if (p.x < 0) p.x = this.width;
+
+                    this.ctx.globalAlpha = p.opacity;
+                    this.ctx.beginPath();
+                    this.ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                    this.ctx.fill();
+                }
+            }
+        }
+
+        class AppController {
+            constructor() {
+                this.cursor = new CursorIntelligence();
+                this.scroll = new KineticScroll();
+                this.weather = new WeatherEngine();
+                this.sliders = Array.from(document.querySelectorAll('.slider-viewport')).map(el => new SliderPhysics(el));
+                
+                this.loadoutCount = 0;
+                this.bindInteractions();
+                this.initObserver();
+
+                this.raf = requestAnimationFrame(() => this.renderLoop());
+            }
+
+            bindInteractions() {
+                // Magnetic Buttons
+                document.querySelectorAll('.btn-acquire').forEach(btn => {
+                    btn.addEventListener('mousemove', e => {
+                        const rect = btn.getBoundingClientRect();
+                        const x = (e.clientX - rect.left - rect.width / 2) * 0.3;
+                        const y = (e.clientY - rect.top - rect.height / 2) * 0.3;
+                        btn.style.transform = `translate(${x}px, ${y}px) scale(1.05)`;
+                    });
+                    btn.addEventListener('mouseleave', () => {
+                        btn.style.transform = `translate(0px, 0px) scale(1)`;
+                    });
+                });
+
+                // Flashlight Injection
+                document.querySelectorAll('.gear-item').forEach(item => {
+                    item.addEventListener('mousemove', e => {
+                        const rect = item.getBoundingClientRect();
+                        item.style.setProperty('--mouse-x', `${e.clientX - rect.left}px`);
+                        item.style.setProperty('--mouse-y', `${e.clientY - rect.top}px`);
+                    });
+                });
+            }
+
+            initObserver() {
+                const nodes = document.querySelectorAll('.route-node');
+                const observer = new IntersectionObserver((entries) => {
+                    entries.forEach(entry => {
+                        if (entry.isIntersecting) {
+                            nodes.forEach(node => {
+                                node.classList.toggle('active', node.dataset.target === entry.target.id);
+                            });
+                        }
+                    });
+                }, { rootMargin: '-30% 0px -70% 0px' });
+
+                document.querySelectorAll('.route-section').forEach(sec => observer.observe(sec));
+            }
+
+            acquireGear() {
+                this.loadoutCount++;
+                const trigger = document.getElementById('loadout-trigger');
+                trigger.innerText = `[ LOADOUT: ${this.loadoutCount} ]`;
+                trigger.style.background = 'var(--ice)';
+                trigger.style.color = 'var(--void)';
+                setTimeout(() => {
+                    trigger.style.background = 'rgba(255,255,255,0.02)';
+                    trigger.style.color = 'var(--snow)';
+                }, 300);
+            }
+
+            scrollTo(id) {
+                const el = document.getElementById(id);
+                if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY, behavior: 'smooth' });
+            }
+
+            renderLoop() {
+                this.cursor.update();
+                this.scroll.update();
+                
+                // Calculate scroll velocity for weather interaction
+                const scrollVel = this.scroll.target - this.scroll.current;
+                this.weather.update(scrollVel);
+
+                this.sliders.forEach(slider => slider.update());
+
+                this.raf = requestAnimationFrame(() => this.renderLoop());
+            }
+        }
+
+        // Boot
+        window.addEventListener('DOMContentLoaded', () => {
+            window.app = new AppController();
+        });
+
+    </script>
+</body>
+</html>
